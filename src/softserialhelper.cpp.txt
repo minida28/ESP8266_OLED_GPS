@@ -1,0 +1,8 @@
+#include "softserialhelper.h"
+
+
+// SoftwareSerial gpsPort(4,5, false, 256); // Rx = D2 ,Tx = D1
+// SoftwareSerial gpsPort(SWSER_RX, SWSER_TX, false, 256); // Rx = D7 ,Tx = D8
+// SoftwareSerial gpsPort(13, 15, false, 256); // Rx = D7 ,Tx = D8
+// #define GPS_PORT_NAME "gpsPort"
+// #define DEBUG_PORT Serial

@@ -1,0 +1,25 @@
+#ifndef encoderhelper_h
+#define encoderhelper_h
+
+/////////////////////////////////////////////////////////////////
+// Uses https://github.com/LennartHennigs/Button2
+/////////////////////////////////////////////////////////////////
+
+#include "Button2.h"
+#include "ESPRotary.h"
+
+extern bool leftPinFlag;
+extern bool rightPinFlag;
+extern bool switchPinToggled;
+
+void rotate(ESPRotary& r);
+void showDirection(ESPRotary& r);
+
+void showPosition(Button2& btn);
+
+void resetPosition(Button2& btn);
+
+void ENCODERsetup();
+void ENCODERloop();
+
+#endif

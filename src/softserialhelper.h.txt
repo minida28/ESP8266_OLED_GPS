@@ -1,0 +1,14 @@
+#ifndef softserialhelper_h
+#define softserialhelper_h
+
+
+// #include <SoftwareSerial.h>
+
+// // SoftwareSerial gpsPort;
+// SoftwareSerial gpsPort(13, 15, false, 256); // Rx = D7 ,Tx = D8
+// #define GPS_PORT_NAME "gpsPort"
+// #define DEBUG_PORT Serial
+
+
+
+#endif // softserialhelper_h
