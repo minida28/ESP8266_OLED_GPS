@@ -61,7 +61,7 @@ char *sholatNameStr(uint8_t id)
 {
   static char buf[10];
 
-  if (dtLocal.DayOfWeek() == 5 && id == Dhuhr)
+  if (dtLocal.DayOfWeek() == 6 && id == Dhuhr)
   {
     char JUMUAH[] = "JUMAT";
     strcpy(buf, JUMUAH);
@@ -156,7 +156,8 @@ void process_sholat()
   // location settings;
   double lat = configLocation.latitude;
   double lon = configLocation.longitude;
-  float tZ = configLocation.timezone;
+  // float tZ = configLocation.timezone;
+  float tZ = TimezoneFloat();
 
   //CALCULATE YESTERDAY'S SHOLAT TIMES
   InnerProcess(localTime - 86400UL, lat, lon, tZ, timestampSholatTimesYesterday);
@@ -176,7 +177,7 @@ void process_sholat_2nd_stage()
   // char bufMINUTE[3];
   // char bufSECOND[3];
 
-  time_t s_tm = 0;
+  uint32_t s_tm = 0;
 
   // time_t t_utc;
 
@@ -218,9 +219,9 @@ void process_sholat_2nd_stage()
       }
 
       //then
-      time_t timestamp_current_today;
-      time_t timestamp_next_today;
-      time_t timestamp_next_tomorrow;
+      uint32_t timestamp_current_today;
+      uint32_t timestamp_next_today;
+      uint32_t timestamp_next_tomorrow;
 
       timestamp_current_today = timestampSholatTimesToday[tempCurrentID];
 

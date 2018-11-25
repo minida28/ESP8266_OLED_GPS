@@ -144,11 +144,12 @@ gps_fix fix;
 uint8_t LastSentenceInInterval = 0xFF; // storage for the run-time selection
 unsigned long BAUD_GPS = 9600UL;
 
-static char lastChar; // last command char
+// static char lastChar; // last command char
 // static bool echoing = true;
-static bool tracing = false;
+static bool tracing = true;
 uint8_t ubloxClassID = 0;
 bool PPS = false;
+bool RMCFlag = false;
 
 bool parseGPScompleted;
 double distanceToBaseKm;
@@ -252,7 +253,7 @@ void changeBaud(const char *textCommand, unsigned long baud)
 
 //------------------------------------
 
-static void doSomeWork()
+void doSomeWork()
 {
     // Print all the things!
 
@@ -352,12 +353,51 @@ void GPSsetup()
 
     sendUBX(ubxRate1Hz, sizeof(ubxRate1Hz));
 
+    /*
+#ifdef NMEAGPS_PARSE_VTG
+    sendUBX(ubxEnableVTG, sizeof(ubxEnableVTG));
+#else
     sendUBX(ubxDisableVTG, sizeof(ubxDisableVTG));
+#endif
+
+#ifdef NMEAGPS_PARSE_GGA
+    sendUBX(ubxEnableGGA, sizeof(ubxEnableGGA));
+#else
+    sendUBX(ubxDisableGGA, sizeof(ubxDisableGGA));
+#endif
+
+#ifdef NMEAGPS_PARSE_GSA
+    sendUBX(ubxEnableGSA, sizeof(ubxEnableGSA));
+#else
     sendUBX(ubxDisableGSA, sizeof(ubxDisableGSA));
+#endif
+
+#ifdef NMEAGPS_PARSE_GSV
+    sendUBX(ubxEnableGSV, sizeof(ubxEnableGSV));
+#else
     sendUBX(ubxDisableGSV, sizeof(ubxDisableGSV));
+#endif
+*/
+
+    // sendUBX(ubxEnableVTG, sizeof(ubxEnableVTG));
+    sendUBX(ubxDisableVTG, sizeof(ubxDisableVTG));
+
+    // sendUBX(ubxEnableGGA, sizeof(ubxEnableGGA));
+    sendUBX(ubxDisableGGA, sizeof(ubxDisableGGA));
+
+    // sendUBX(ubxEnableGSA, sizeof(ubxEnableGSA));
+    sendUBX(ubxDisableGSA, sizeof(ubxDisableGSA));
+
+    // sendUBX(ubxEnableGSV, sizeof(ubxEnableGSV));
+    sendUBX(ubxDisableGSV, sizeof(ubxDisableGSV));
+
     sendUBX(ubxDisableGLL, sizeof(ubxDisableGLL));
+
     sendUBX(ubxDisableGST, sizeof(ubxDisableGST));
+
+    // sendUBX(ubxEnableZDA, sizeof(ubxEnableZDA));
     sendUBX(ubxDisableZDA, sizeof(ubxDisableZDA));
+
     sendUBX(ubxDisableDTM, sizeof(ubxDisableDTM));
     sendUBX(ubxDisableGBS, sizeof(ubxDisableGBS));
     sendUBX(ubxDisableGNS, sizeof(ubxDisableGNS));
@@ -367,18 +407,31 @@ void GPSsetup()
     sendUBX(ubxEnableRMC, sizeof(ubxEnableRMC));
     // sendUBX(ubxDisableRMC, sizeof(ubxDisableRMC));
 
-    sendUBX(ubxEnableGGA, sizeof(ubxEnableGGA));
-    // sendUBX(ubxDisableGGA, sizeof(ubxDisableGGA));
-
-    sendUBX(ubxEnableTimTP, sizeof(ubxEnableTimTP));
-    // sendUBX(ubxDisableTimTP, sizeof(ubxDisableTimTP));
+    // sendUBX(ubxEnableTimTP, sizeof(ubxEnableTimTP));
+    sendUBX(ubxDisableTimTP, sizeof(ubxDisableTimTP));
 
     // sendUBX(ubxEnablePVT, sizeof(ubxEnablePVT));
     sendUBX(ubxDisablePVT, sizeof(ubxDisablePVT));
 
-    // LastSentenceInInterval = NMEAGPS::NMEA_GGA;
-    // LastSentenceInInterval = NMEAGPS::NMEA_ZDA;
+#if defined NMEAGPS_PARSE_ZDA
+    LastSentenceInInterval = NMEAGPS::NMEA_ZDA;
+#elif defined NMEAGPS_PARSE_GST
+    LastSentenceInInterval = NMEAGPS::NMEA_GST;
+#elif defined NMEAGPS_PARSE_GLL
+    LastSentenceInInterval = NMEAGPS::NMEA_GLL;
+#elif defined NMEAGPS_PARSE_GSV
+    LastSentenceInInterval = NMEAGPS::NMEA_GSV;
+#elif defined NMEAGPS_PARSE_GSA
+    LastSentenceInInterval = NMEAGPS::NMEA_GSA;
+#elif defined NMEAGPS_PARSE_GGA
     LastSentenceInInterval = NMEAGPS::NMEA_GGA;
+#elif defined NMEAGPS_PARSE_VTG
+    LastSentenceInInterval = NMEAGPS::NMEA_VTG;
+#elif defined NMEAGPS_PARSE_RMC
+    LastSentenceInInterval = NMEAGPS::NMEA_RMC;
+#endif
+
+    LastSentenceInInterval = NMEAGPS::NMEA_RMC;
 }
 
 void GPSloop()
@@ -546,7 +599,12 @@ void GPSloop()
 
     static bool displayingHex = false;
 
-    uint8_t gpsPortMode = echoing;
+    // uint8_t gpsPortMode = relaying; // 0
+    // uint8_t gpsPortMode = echoing; // 1
+    uint8_t gpsPortMode = 0;
+
+    if (gpsPortMode < 2)
+        tracing = false;
 
     if (gpsPortMode == relaying)
     {
@@ -713,6 +771,12 @@ void GPSloop()
                 {
                     bufNMEA[offset] = c;
                     // offset++;
+                }
+
+                if (offset == 5)
+                {
+                    if (bufNMEA[3] == 'R' && bufNMEA[4] == 'M' && bufNMEA[5] == 'C')
+                        RMCFlag = true;
                 }
 
                 if (asteriskIndex && offset == asteriskIndex + 2)

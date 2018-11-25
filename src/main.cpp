@@ -10,12 +10,14 @@
 #include "pageshelper.h"
 #include "magnetometerhelper.h"
 #include <Ticker.h>
+#include "timezonehelper.h"
+#include <FS.h>
 
 //--------------------------
 
 #define DEBUGPORT Serial
 
-// #define SKIP
+#define SKIP
 
 // #define RELEASE
 
@@ -34,6 +36,14 @@ bool processSholat2ndStageFlag = false;
 
 // void ConstructClockPage(){}
 
+// bool state1000ms;
+bool ticker1000msFlag = false;
+
+// void flip1000ms()
+// {
+//     state1000ms = !state1000ms;
+// }
+
 void flip500ms()
 {
     state500ms = !state500ms;
@@ -41,9 +51,11 @@ void flip500ms()
 
 void ticker1000ms()
 {
-    utcTime++;
-    tick1000ms = true;
-    DEBUGLOG("\r\ntick %lu", millis());
+    // utcTime++;
+    // tick1000ms = true;
+    // DEBUGLOG("\r\ntick %lu", millis());
+    ticker1000msFlag = true;
+    // utcTime++;
 }
 
 Ticker tickerFlip500ms;
@@ -129,6 +141,8 @@ void setup()
 
     Serial.begin(115200);
 
+    SPIFFS.begin();
+
     ENCODERsetup();
 
     // -------------------------------------------------------------------
@@ -161,6 +175,8 @@ void setup()
 
     DisplaySetup();
 
+    MAGNETOMETERsetup();
+
     // GPSsetup();
 
     if (1)
@@ -177,12 +193,47 @@ void setup()
 
         // GPSsetup();
 
-        unsigned long start = 0;
-        while (!fix.valid.date && !fix.valid.time)
+        if (!gpsPort.isListening())
+            gpsPort.begin(BAUD_GPS);
+
+        // char c = 0;
+
+        while (true)
         {
-            if (millis() - start >= 1500)
+            if (gpsPort.available())
+                if (gpsPort.find("$GN"))
+                    break;
+        }
+
+        GPSsetup();
+
+        unsigned long start = 0;
+        uint8_t count = 0;
+        while (true)
+        {
+            GPSloop();
+
+            if (parseGPScompleted)
             {
-                GPSsetup();
+                parseGPScompleted = false;
+
+                count++;
+
+                if (count >= 2)
+                    if (fix.valid.status)
+                        if (fix.valid.date && fix.valid.time)
+                            break;
+            }
+
+            if (millis() - start >= 500)
+            {
+                // DEBUGLOG("\r\nstatus: %d, date: %d, time: %d",
+                // fix.valid.status,
+                // fix.valid.date,
+                // fix.valid.time);
+
+                doSomeWork();
+
                 start = millis();
 
                 static int8_t x = 80;
@@ -210,18 +261,50 @@ void setup()
 
                 u8g2.sendBuffer();
             }
-            GPSloop();
+
+            // break;
         }
+
+        // tickerTick1000ms.attach_ms(1000, ticker1000ms);
+
+        //Initialize Ticker every 0.5s
+        // timer1_isr_init();
+        // timer1_attachInterrupt(ticker1000ms);
+        // timer1_enable(TIM_DIV256, TIM_EDGE, TIM_LOOP);
+        // timer1_write(312500); //1000000 us
 
         if (1)
         {
-            utcTime = fix.dateTime;
+            uint32_t gpsTime = fix.dateTime;
+
+            TimeSetup();
+
+            SyncTime(gpsTime);
+
+            TimeLoop();
+
+            // ProcessTimestamp(utcTime);
+            // ProcessTimestamp(gpsTime);
+
+            DEBUGLOG("utcTime: %lu\r\n", utcTime);
             lastBoot = utcTime - millis() / 1000;
             lastSync = utcTime;
 
-            ProcessTimestamp(utcTime);
+            // tickerTick1000ms.attach_ms(1000, ticker1000ms);
 
-            DEBUGLOG("Sync! %d:%02d:%02d\r\n", h, m, s);
+            // //Initialize Ticker every 0.5s
+            // // timer1_isr_init();
+            // timer1_attachInterrupt(ticker1000ms);
+            // timer1_enable(TIM_DIV256, TIM_EDGE, TIM_LOOP);
+            // timer1_write(312500); //1000000 us
+
+            // RtcDateTime dt = utcTime;
+            // uint32_t t = dt.Epoch32Time();
+            // TimeSetup(t);
+
+            // ProcessTimestamp(utcTime);
+
+            DEBUGLOG("Sync! %s %s\r\n", getDateStr(localTime), getTimeStr(localTime));
 
             if (fix.valid.location)
             {
@@ -234,11 +317,22 @@ void setup()
         }
     }
 
-    MAGNETOMETERsetup();
-
     // utcTime = 592953120 - 5; // simulate 5 seconds before subuh at Bekasi
     // utcTime = 592953120 - 305; // simulate 5 minutes before subuh at Bekasi
-    // Serial.println(F("Setup completed"));
+
+    // time_t _epoch = 2147483647 - 10;
+
+    // timeval tv = {_epoch, 0};
+    // timezone tz = {0, 0};
+    // settimeofday(&tv, &tz);
+
+    // gettimeofday(&tv, nullptr);
+    // //   clock_gettime(0, &tp);
+
+    // utcTime = time(nullptr);
+
+    page = Clock;
+
     DEBUGLOG("Setup completed\r\n");
 
     // gpsPort.end();
@@ -246,20 +340,175 @@ void setup()
 
 void loop()
 {
-    // parseGPScompleted = false;
+    parseGPScompleted = false;
     tick500ms = 0;
     tick1000ms = 0;
-    static byte page = Clock;
+    // static byte page = TimezoneDB; // Clock
+    // static byte page = Clock;
     // static byte page = SystemInfo;
 
     bool redrawPage = 0;
     static bool gpsPortEnabled = 0;
 
+    if (gpsPortEnabled)
+        GPSloop();
+
+    TimeLoop();
+
+    // if (ticker1000msFlag)
+    // {
+
+    //     ticker1000msFlag = false;
+    //     utcTime++;
+    //     // DEBUGLOG("\r\nFLAG\t%lu", utcTime);
+    // }
+
+    // if (!timer1_enabled())
+    // {
+    //     timer1_attachInterrupt(ticker1000ms);
+    //     timer1_enable(TIM_DIV256, TIM_EDGE, TIM_LOOP);
+    //     timer1_write(312500); //1000000 us
+    // }
+
+    if (PPS)
+    {
+        PPS = false;
+        // gpsPort.end();
+        // Tone0(buzzerPin, 4000, 10, true);
+        // gpsPort.begin(BAUD_GPS);
+        // Tone1(buzzerPin, 512);
+        // DEBUGLOG("\r\nPPS\t%lu", millis());
+
+        // timer1_detachInterrupt();
+        // timer1_attachInterrupt(ticker1000ms);
+        // timer1_enable(TIM_DIV256, TIM_EDGE, TIM_LOOP);
+        // timer1_write(312500); //1000000 us
+
+        // if (tickerTick1000ms.active())
+        // {
+        //     tickerTick1000ms.detach();
+        //     tickerTick1000ms.attach_ms(1000, ticker1000ms);
+        // }
+    }
+
+    if (RMCFlag)
+    {
+        RMCFlag = false;
+        // gpsPort.end();
+        // Tone0(buzzerPin, 4000, 10, true);
+        // gpsPort.begin(BAUD_GPS);
+        // Tone1(buzzerPin, 512);
+        // DEBUGLOG("\r\nRMC\t%lu", millis());
+    }
+
+    if (parseGPScompleted)
+    {
+        if (fix.valid.location)
+        {
+            distanceToBaseKm = haversine(fix.latitude(), fix.longitude(), configLocation.latitude, configLocation.longitude) / 1000UL;
+
+            // if ((int)distanceToBaseKm >= 10)
+            // {
+            //   configLocation.latitude = fix.latitude();
+            //   configLocation.longitude = fix.longitude();
+
+            //   updateEEPROM();
+
+            //   process_sholat();
+            // }
+        }
+    }
+
+    static bool syncFlag = false;
+
+    //*** SYNC INTERVAL
+    if (!syncFlag && utcTime % 600 == 0)
+    {
+        syncFlag = true;
+    }
+
+    if (syncFlag ||
+        page == Speedometer ||
+        page == BaseLocation)
+        gpsPortEnabled = true;
+    else
+        gpsPortEnabled = false;
+
+    if (gpsPortEnabled)
+    {
+        if (!gpsPort.isListening())
+        {
+            gpsPort.begin(BAUD_GPS);
+            DEBUGLOG("gpsPort turned On, baud: %lu\r\n", BAUD_GPS);
+        }
+    }
+    else
+    {
+        // if (!parseGPScompleted)
+        //     return;
+
+        if (gpsPort.isListening())
+        {
+            gpsPort.end();
+            gpsPort.flush();
+            DEBUGLOG("gpsPort turned Off\r\n");
+        }
+    }
+
+    if (parseGPScompleted)
+    {
+        if (fix.valid.time && fix.valid.date)
+        {
+            uint32_t gpsTime = fix.dateTime;
+
+            // DEBUGLOG("\r\nFIX\t%u\r\n", gpsTime);
+
+            if (syncFlag)
+            {
+                syncFlag = false;
+
+                RtcDateTime dt = gpsTime;
+                uint32_t t = dt.Epoch32Time();
+
+                if (t == utcTime)
+                {
+                    DEBUGLOG("\r\nSYNC NOT REQUIRED\r\n");
+                }
+                else
+                {
+                    // gpsTime = 1200798847 + 10; // y2k38 + 10 seconds
+
+                    SyncTime(gpsTime);
+
+                    lastSync = utcTime;
+
+                    DEBUGLOG("\r\nSYNC utcTime: %lu\r\n", utcTime);
+
+                    processSholatFlag = true;
+                }
+            }
+        }
+    }
+
+    static uint32_t utcTime_old = 0;
+
+    if (utcTime != utcTime_old)
+    {
+        utcTime_old = utcTime;
+        // prevMillis = currentMillis;
+
+        // DEBUGLOG("\r\ntick\t%lu", utcTime);
+
+        // ProcessTimestamp(utcTime);
+
+        tick1000ms = true;
+    }
+
     ENCODERloop();
 
     if (switchPinToggled)
     {
-        DEBUGLOG("\r\npin toggled");
+        DEBUGLOG("pin toggled\r\n");
         // switchPinToggled = false;
 
         // redrawPage = true;
@@ -289,6 +538,8 @@ void loop()
         else
             Tone0(buzzerPin, 4000, 30, false);
     }
+
+#ifndef SKIP
 
     static bool syncFlag = false;
 
@@ -331,54 +582,6 @@ void loop()
     if (parseGPScompleted)
         DEBUGLOG("\r\nparsed %lu", millis());
 
-    // if (gpsPort.isListening())
-    // {
-    //     parseGPScompleted = false;
-    //     GPSloop();
-    //     // digitalWrite(LED_1, !parseGPScompleted);
-    // }
-
-    //         GPSloop();
-    //         digitalWrite(LED_1, !parseGPScompleted);
-
-    // if (page != Compass || syncFlag)
-    // {
-    //     if (page == Clock && syncFlag)
-    //     {
-    //         if (!gpsPort.isListening())
-    //         {
-    //             gpsPort.begin(BAUD_GPS);
-    //             DEBUGLOG("\r\ngpsPort turned On, baud: %lu", BAUD_GPS);
-    //         }
-
-    //         GPSloop();
-    //         digitalWrite(LED_1, !parseGPScompleted);
-    //     }
-    //     // else if (page == Clock && !syncFlag)
-    //     else if (!syncFlag)
-    //     {
-    //         if (gpsPort.isListening())
-    //         {
-    //             gpsPort.end();
-    //             DEBUGLOG("\r\ngpsPort turned Off");
-    //         }
-    //     }
-    //     else
-    //     {
-    //         if (!gpsPort.isListening())
-    //         {
-    //             gpsPort.begin(BAUD_GPS);
-    //             DEBUGLOG("\r\ngpsPort turned On, baud: %lu", BAUD_GPS);
-    //         }
-
-    //         if (!switchPinToggled || !rightPinFlag || !leftPinFlag)
-    //         {
-    //             GPSloop();
-    //             digitalWrite(LED_1, !parseGPScompleted);
-    //         }
-    //     }
-    // }
-
     if (PPS)
     {
         PPS = false;
@@ -386,7 +589,10 @@ void loop()
         // Tone0(buzzerPin, 4000, 10, true);
         // gpsPort.begin(BAUD_GPS);
         // Tone1(buzzerPin, 512);
+        DEBUGLOG("\r\nPPS\t%lu", millis());
     }
+
+#endif
 
 #ifndef SKIP
     if (parseGPScompleted)
@@ -451,6 +657,10 @@ void loop()
 
         tick1000ms = true;
     }
+
+    if (tick1000ms)
+    {
+    }
 #endif
 
     if (tick1000ms)
@@ -494,7 +704,7 @@ void loop()
 
     static uint8_t page_old = PageCount;
     static unsigned long timerPageChanged = 0;
-    static bool pageChangeFlag = false;
+    // static bool pageChangeFlag = false;
     if (page != page_old)
     {
         page_old = page;
@@ -504,7 +714,7 @@ void loop()
         timerPageChanged = millis();
         pageChangeFlag = true;
 
-        DEBUGLOG("\r\npage: %d", page);
+        DEBUGLOG("page: %d\r\n", page);
 
         u8g2.clearBuffer();
 
@@ -518,12 +728,12 @@ void loop()
         if (!gpsPort.isListening())
         {
             gpsPort.begin(BAUD_GPS);
-            DEBUGLOG("\r\ngpsPort turned On, baud: %lu", BAUD_GPS);
+            DEBUGLOG("gpsPort turned On, baud: %lu\r\n", BAUD_GPS);
         }
 
         if (page == Speedometer)
         {
-            DEBUGLOG("\r\nsend gps config, page:%d", page);
+            DEBUGLOG("send gps config, page:%d\r\n", page);
 
             sendUBX(ubxEnableVTG, sizeof(ubxEnableVTG));
             sendUBX(ubxDisableRMC, sizeof(ubxDisableRMC));
@@ -541,16 +751,19 @@ void loop()
         // }
         else
         {
-            DEBUGLOG("\r\nsend gps config, page:%d", page);
+            DEBUGLOG("send gps config, page:%d\r\n", page);
 
             sendUBX(ubxRate1Hz, sizeof(ubxRate1Hz));
 
             sendUBX(ubxDisableVTG, sizeof(ubxDisableVTG));
-            sendUBX(ubxEnableTimTP, sizeof(ubxEnableTimTP));
+            // sendUBX(ubxEnableTimTP, sizeof(ubxEnableTimTP));
             sendUBX(ubxEnableRMC, sizeof(ubxEnableRMC));
-            sendUBX(ubxEnableGGA, sizeof(ubxEnableGGA));
-            // LastSentenceInInterval = NMEAGPS::NMEA_RMC;
-            LastSentenceInInterval = NMEAGPS::NMEA_GGA;
+
+            // sendUBX(ubxEnableGGA, sizeof(ubxEnableGGA));
+            sendUBX(ubxDisableGGA, sizeof(ubxDisableGGA));
+
+            LastSentenceInInterval = NMEAGPS::NMEA_RMC;
+            // LastSentenceInInterval = NMEAGPS::NMEA_GGA;
         }
     }
 
@@ -560,9 +773,9 @@ void loop()
             redrawPage = true;
 
         static uint8_t m_old = 254;
-        if (m_old != m)
+        if (m_old != minLocal)
         {
-            m_old = m;
+            m_old = minLocal;
             redrawPage = true;
         }
 
@@ -578,7 +791,7 @@ void loop()
         //**** CONTENT ****//
 
         uint8_t s_next;
-        s_next = s + 1;
+        s_next = secLocal + 1;
         if (s_next == 60)
             s_next = 0;
 
@@ -612,8 +825,23 @@ void loop()
         // step 2; counter 12;
         // step 3; counter 16;
 
+        // static bool scroll = false;
+        // if (counter == 20)
+        // {
+        //     scroll = true;
+        //     y_next = y_start - u8g2.getMaxCharHeight();
+        //     y_now = y_start;
+        // }
+
         static bool scroll = false;
-        if (counter == 19)
+        static unsigned long prevMillis = 0;
+
+        if (tick1000ms)
+        {
+            prevMillis = millis();
+        }
+
+        if (scroll == false && millis() - prevMillis >= 725)
         {
             scroll = true;
             y_next = y_start - u8g2.getMaxCharHeight();
@@ -646,7 +874,7 @@ void loop()
         u8g2.setCursor(x + u8g2.getMaxCharWidth(), y_next);
         u8g2.print(buf);
 
-        snprintf_P(bufSec, sizeof(bufSec), PSTR("%02d"), s);
+        snprintf_P(bufSec, sizeof(bufSec), PSTR("%02d"), secLocal);
         snprintf_P(buf, sizeof(buf), PSTR("%c"), bufSec[1]);
 
         u8g2.setCursor(x + u8g2.getMaxCharWidth(), y_now);
@@ -666,7 +894,7 @@ void loop()
         u8g2.print(buf);
 
         y0 = 15;
-        snprintf_P(bufSec, sizeof(bufSec), PSTR("%02d"), s);
+        snprintf_P(bufSec, sizeof(bufSec), PSTR("%02d"), secLocal);
         snprintf_P(buf, sizeof(buf), PSTR("%c"), bufSec[0]);
         if (bufSec[1] == '9')
         {
@@ -698,7 +926,7 @@ void loop()
         u8g2.setFont(font);
 
         char mon[4];
-        strcpy(mon, monthShortStr(dtLocal.Month()));
+        strcpy(mon, monthShortStr(monthLocal));
 
         /*            
             snprintf_P(buf, sizeof(buf), PSTR("%s,%d-%s SAT%2d"),
@@ -709,10 +937,10 @@ void loop()
                        */
 
         snprintf_P(buf, sizeof(buf), PSTR("%s %d %s %d"),
-                   dayShortStr(dtLocal.DayOfWeek()),
-                   dtLocal.Day(),
+                   dayShortStr(wdayLocal),
+                   mdayLocal,
                    mon,
-                   dtLocal.Year());
+                   yearLocal);
 
         uint16_t len = u8g2.getStrWidth(buf);
         x = (u8g2.getDisplayWidth() - len) / 2;
@@ -845,55 +1073,71 @@ void loop()
             page = MainMenu;
         }
     }
-    else if (page == Timezone)
+    // else if (page == Timezone)
+    // {
+    //     if (redrawPage)
+    //     {
+    //         ConstructTimezonePage();
+    //     }
+    //     else if (leftPinFlag || rightPinFlag)
+    //     {
+    //         if (rightPinFlag)
+    //         {
+    //             configLocation.timezone++;
+    //             if (configLocation.timezone > 14)
+    //                 configLocation.timezone = 14;
+    //         }
+
+    //         if (leftPinFlag)
+    //         {
+    //             configLocation.timezone--;
+    //             if (configLocation.timezone < -12)
+    //                 configLocation.timezone = -12;
+    //         }
+
+    //         int len;
+
+    //         char temp[7];
+    //         // dtostrf(configLocation.timezone, 0, 0, temp);
+    //         // len = strlen(temp);
+
+    //         const uint8_t *font;
+    //         font = u8g2_font_inb19_mn;
+    //         font = bigNumbers21x26;
+    //         u8g2.setFont(font);
+    //         len = u8g2.getMaxCharWidth();
+    //         len = 3 * len; // max 3 chars
+    //         uint8_t x = (128 - len) / 2;
+    //         u8g2.setCursor(x, 23);
+    //         u8g2.print("   ");
+
+    //         dtostrf(configLocation.timezone, 0, 0, temp);
+    //         len = u8g2.getStrWidth(temp);
+    //         x = (128 - len) / 2;
+    //         u8g2.setCursor(x, 23);
+    //         u8g2.print(temp);
+
+    //         redrawPage = true;
+    //     }
+    //     else if (switchPinToggled)
+    //     {
+    //         page = Settings;
+    //     }
+    // }
+    else if (page == TimezoneDB)
     {
         if (redrawPage)
         {
-            ConstructTimezonePage();
+            // create_timezone_start_position("/zones.csv");
+            ConstructTimezoneDBPage();
         }
-        else if (leftPinFlag || rightPinFlag)
+        else if (tick500ms || rightPinFlag || leftPinFlag || switchPinToggled)
         {
-            if (rightPinFlag)
-            {
-                configLocation.timezone++;
-                if (configLocation.timezone > 14)
-                    configLocation.timezone = 14;
-            }
+            u8g2.clearBuffer();
 
-            if (leftPinFlag)
-            {
-                configLocation.timezone--;
-                if (configLocation.timezone < -12)
-                    configLocation.timezone = -12;
-            }
-
-            int len;
-
-            char temp[7];
-            // dtostrf(configLocation.timezone, 0, 0, temp);
-            // len = strlen(temp);
-
-            const uint8_t *font;
-            font = u8g2_font_inb19_mn;
-            font = bigNumbers21x26;
-            u8g2.setFont(font);
-            len = u8g2.getMaxCharWidth();
-            len = 3 * len; // max 3 chars
-            uint8_t x = (128 - len) / 2;
-            u8g2.setCursor(x, 23);
-            u8g2.print("   ");
-
-            dtostrf(configLocation.timezone, 0, 0, temp);
-            len = u8g2.getStrWidth(temp);
-            x = (128 - len) / 2;
-            u8g2.setCursor(x, 23);
-            u8g2.print(temp);
+            ConstructTimezoneDBPage();
 
             redrawPage = true;
-        }
-        else if (switchPinToggled)
-        {
-            page = Settings;
         }
     }
     else if (page == Uptime)
@@ -1048,6 +1292,10 @@ void loop()
             {
                 page = Timezone;
             }
+            else if (pos == EntryTimezoneDB)
+            {
+                page = TimezoneDB;
+            }
             else if (pos == EntrySetGPS)
             {
                 page = SetGPS;
@@ -1192,7 +1440,7 @@ void loop()
     if (mode != mode_old)
     {
         mode_old = mode;
-        DEBUGLOG("\r\nMODE: %d", mode);
+        DEBUGLOG("MODE: %d\r\n", mode);
     }
 
     // buzzer

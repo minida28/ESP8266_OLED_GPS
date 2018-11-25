@@ -87,8 +87,8 @@
 
 #define LED_1 16      //D0
 #define buzzerPin 5       //D1
-#define ENC_SW 4       //D2
-#define ENC_CLK 0       //D3
+#define ENC_SW 0       //D3
+#define ENC_CLK 4       //D2
 #define SCL 14      //D5
 #define ENC_DT 2     //D4
 #define SOFTSER_TX ESP_PIN_15 //D8

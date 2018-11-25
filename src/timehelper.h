@@ -11,6 +11,9 @@
 // #include <Ticker.h>
 #include "locationhelper.h"
 
+#include <sys/time.h>  // struct timeval
+#include <coredecls.h> // settimeofday_cb()
+
 #include <inttypes.h>
 #ifndef __AVR__
 #include <sys/types.h> // for __time_t_defined, but avr libc lacks sys/types.h
@@ -134,7 +137,15 @@ extern "C++"
     extern unsigned long lastBoot;
     extern unsigned long lastSync;
 
-    extern uint8_t h, m, s;
+    // extern uint8_t h, m, s;
+
+    extern uint16_t yearLocal;
+    extern uint8_t monthLocal;
+    extern uint8_t mdayLocal;
+    extern uint8_t wdayLocal;
+    extern uint8_t hourLocal;
+    extern uint8_t minLocal;
+    extern uint8_t secLocal;
 
     extern RtcDateTime dtUtc;
     extern RtcDateTime dtLocal;
@@ -168,8 +179,8 @@ extern "C++"
     long TimezoneMinutes();
     long TimezoneSeconds();
 
-    char *getDateStr(time_t rawtime);
-    char *getTimeStr(time_t rawtime);
+    char *getDateStr(uint32_t rawtime);
+    char *getTimeStr(uint32_t rawtime);
     char *getDateTimeStr(uint32_t moment);
     // char *GetRtcDateTimeStr(const RtcDateTime &dt);
     char *getLastBootStr();
@@ -187,6 +198,7 @@ extern "C++"
     unsigned long tmConvert_t(int YYYY, byte MM, byte DD, byte hh, byte mm, byte ss);
     // unsigned long tmConvert_t(int YYYY, byte MM, byte DD, byte hh, byte mm, byte ss);
 
+    void SyncTime(uint32_t rawtime);
     void TimeSetup();
     void TimeLoop();
 } // extern "C++"

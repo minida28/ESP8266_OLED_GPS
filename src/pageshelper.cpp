@@ -1,7 +1,31 @@
 #include "pageshelper.h"
 #include "resources.h"
+#include "timezonehelper.h"
+
+#define DEBUGPORT Serial
+
+#define PRINT(fmt, ...)                          \
+    {                                            \
+        static const char pfmt[] PROGMEM = fmt;  \
+        DEBUGPORT.printf_P(pfmt, ##__VA_ARGS__); \
+    }
+
+// #define RELEASE
+
+#ifndef RELEASE
+
+#define DEBUGLOG(fmt, ...)                      \
+    {                                           \
+        static const char pfmt[] PROGMEM = fmt; \
+        printf_P(pfmt, ##__VA_ARGS__);          \
+    }
+#else
+#define DEBUGLOG(...)
+#endif
 
 uint8_t mode = 0;
+uint8_t page = 0;
+bool pageChangeFlag = false;
 
 void ConstructClockPage()
 {
@@ -76,7 +100,7 @@ void ConstructClockPage()
     //            mon,
     //            dtLocal.Year());
 
-    int16_t x, y; 
+    int16_t x, y;
 
     // uint16_t len = u8g2.getStrWidth(buf);
     // x = (u8g2.getDisplayWidth() - len) / 2;
@@ -93,10 +117,10 @@ void ConstructClockPage()
     u8g2.setDrawColor(1);
 
     char bufSec[3];
-    snprintf_P(bufSec, sizeof(bufSec), PSTR("%02d"), s);
+    snprintf_P(bufSec, sizeof(bufSec), PSTR("%02d"), secLocal);
 
     // snprintf_P(buf, sizeof(buf), PSTR("%2d:%02d:%c "), h, m, bufSec[0]);
-    snprintf_P(buf, sizeof(buf), PSTR("%2d:%02d:  "), h, m);
+    snprintf_P(buf, sizeof(buf), PSTR("%2d:%02d:  "), hourLocal, minLocal);
 
     x = 0;
     y = 15;
@@ -275,44 +299,360 @@ void ConstructBaseLocationPage()
     u8g2.print(dtostrf(distanceToBaseKm, 11, 3, buf));
 }
 
-void ConstructTimezonePage()
+// void ConstructTimezonePage()
+// {
+//     //title
+//     const char *buf = "TIMEZONE";
+//     int len = strlen(buf);
+//     len = len * 8;
+//     uint8_t x = (128 - len) / 2;
+
+//     const uint8_t *font;
+//     font = u8g2_font_artossans8_8r;
+//     u8g2.setFont(font);
+//     u8g2.setCursor(x, 0);
+//     u8g2.print(buf);
+
+//     char temp[7];
+//     dtostrf(configLocation.timezone, 0, 0, temp);
+//     len = strlen(temp);
+
+//     font = u8g2_font_inb19_mn;
+//     font = bigNumbers21x26;
+//     u8g2.setFont(font);
+//     len = u8g2.getStrWidth(temp);
+//     x = (128 - len) / 2;
+
+//     font = u8g2_font_inb19_mn;
+//     font = bigNumbers21x26;
+//     u8g2.setFont(font);
+//     u8g2.setCursor(x, 23);
+//     u8g2.print(temp);
+
+//     //menu text
+//     // OzOled.drawFont8("Alarm     ", 0, 7);
+// }
+
+void ConstructTimezoneDBPage()
 {
-    //title
-    const char *buf = "TIMEZONE";
-    int len = strlen(buf);
-    len = len * 8;
-    uint8_t x = (128 - len) / 2;
+    enum enumTzDB
+    {
+        Tz,
+        Save,
+        Exit,
+        EntryCount
+    };
 
+    static uint16_t pos = 0;
+    uint8_t maxPos = EntryCount;
+
+    static char tempBufZoneName[sizeof(configLocation.timezonename)];
+    static char tempBufZoneString[sizeof(configLocation.timezonestring)];
+
+    if (pageChangeFlag)
+    {
+        pos = 0;
+
+        get_zones_info(tempBufZoneName, tempBufZoneString);
+
+        // strlcpy(tempBufZoneName, configLocation.timezonename, sizeof(configLocation.timezonename));
+        // strlcpy(tempBufZoneString, configLocation.timezonestring, sizeof(configLocation.timezonestring));
+    }
+
+    if (rightPinFlag)
+    {
+        if (mode == pageMode)
+        {
+            if (pos < maxPos - 1)
+                pos++;
+
+            DEBUGLOG("pos: %d\r\n", pos);
+        }
+    }
+    else if (leftPinFlag)
+    {
+        if (mode == pageMode)
+        {
+            if (pos > 0)
+                pos--;
+
+            DEBUGLOG("pos: %d\r\n", pos);
+        }
+    }
+
+    else if (switchPinToggled)
+    {
+        if (pos == Save)
+        {
+            // ConstructDateTimePage(pos, moment);
+            // processSholatFlag = true;
+            DEBUGLOG("Save\r\n");
+        }
+        else if (pos == maxPos - 1)
+        {
+            page = Settings;
+            DEBUGLOG("Exit\r\n");
+            // return;
+        }
+        else
+        {
+            if (mode == pageMode)
+                mode = editMode;
+            else
+                mode = pageMode;
+        }
+    }
+
+    // char buf[17];
     const uint8_t *font;
+
+    uint16_t dispWidth = u8g2.getDisplayWidth();
+
+    //title
     font = u8g2_font_artossans8_8r;
+    // font = u8g2_font_profont11_tf;
+    // font = u8g2_font_mozart_nbp_tr;
+    // font = u8g2_font_artossans8_8u;
+
     u8g2.setFont(font);
-    u8g2.setCursor(x, 0);
-    u8g2.print(buf);
 
-    char temp[7];
-    dtostrf(configLocation.timezone, 0, 0, temp);
-    len = strlen(temp);
+    const char *text = "TIMEZONE DB";
+    int len = u8g2.getStrWidth(text);
+    uint16_t x = (dispWidth - len) / 2;
 
-    font = u8g2_font_inb19_mn;
-    font = bigNumbers21x26;
-    u8g2.setFont(font);
-    len = u8g2.getStrWidth(temp);
-    x = (128 - len) / 2;
+    uint8_t y = 0;
 
-    font = u8g2_font_inb19_mn;
-    font = bigNumbers21x26;
-    u8g2.setFont(font);
-    u8g2.setCursor(x, 23);
-    u8g2.print(temp);
+    u8g2.setCursor(x, y);
+    u8g2.print(text);
 
-    //menu text
-    // OzOled.drawFont8("Alarm     ", 0, 7);
+    y = y + 9;
+
+    u8g2.drawHLine(0, y, u8g2.getDisplayWidth());
+
+    // bool mask = 1;
+    bool color = mask;
+    bool blinkColor = state500ms;
+
+    //*** DB ***//
+    char bufContinent[sizeof(configLocation.timezonename)];
+    char bufCity[sizeof(configLocation.timezonename)];
+
+    if (pos == Tz)
+    {
+        if (mode == editMode)
+            color = blinkColor;
+        else
+            color = !mask;
+
+        if (mode == editMode)
+        {
+            if (rightPinFlag || leftPinFlag)
+            {
+                get_zones_info(tempBufZoneName, tempBufZoneString);
+            }
+        }
+    }
+    else
+        color = mask;
+
+    u8g2.setDrawColor(color);
+
+    u8g2.setFontMode(0);
+
+    char *token; // this is used by strtok() as an index
+
+    // DEBUGLOG("tempBufZoneName: %s\r\n", tempBufZoneName);
+    char buf[sizeof(configLocation.timezonename)];
+    strlcpy(buf, tempBufZoneName, sizeof(buf));
+
+    token = strtok(buf, "/");
+    strlcpy(bufContinent, token, strlen(token) + 1);
+    token = strtok(NULL, "\0");
+    strlcpy(bufCity, token, strlen(token) + 1);
+
+    // DEBUGLOG("%s %s %s\r\n", bufContinent, bufCity, tempBufZoneString);
+
+    x = u8g2.getStrWidth(bufContinent);
+    x = (dispWidth - x) / 2;
+    y = y + (1 * (u8g2.getMaxCharHeight() + 2));
+    u8g2.setCursor(x, y);
+    u8g2.print(bufContinent);
+
+    x = u8g2.getStrWidth(bufCity);
+    x = (dispWidth - x) / 2;
+    y = y + (1 * (u8g2.getMaxCharHeight() + 2));
+    u8g2.setCursor(x, y);
+
+    u8g2.print(bufCity);
+
+
+
+    int count = 0;
+    bool skip = false;
+    len = strlen(tempBufZoneString);
+    uint8_t _case = 99;
+    // int startChar = 0;
+    char bufTzOffset[17];
+    uint8_t tempI = 0;
+
+    int offset = 0;
+
+    for (int i = 0; i < len + 1; i++)
+    {
+        char c = tempBufZoneString[i];
+
+        if (skip)
+        {
+            if (_case == 0)
+            {
+                if (offset == 0)
+                {
+                    if (c == '-')
+                        c = '+';
+                    else
+                    {
+                        bufTzOffset[offset] = '-';
+                        offset++;
+                    }
+                }
+
+                bufTzOffset[offset] = c;
+
+                if (i == len)
+                {
+                    bufTzOffset[offset + 1] = '\0';
+                    char buf[sizeof(bufTzOffset)];
+                    sprintf(buf, "UTC%s", bufTzOffset);
+                    strlcpy(bufTzOffset, buf, sizeof(bufTzOffset));
+                    break;
+                }
+
+                offset++;
+            }
+            else if (_case == 1)
+            {
+                if (offset == 0)
+                {
+                    if (c == '-')
+                        c = '+';
+                    else
+                    {
+                        bufTzOffset[offset] = '-';
+                        offset++;
+                    }
+                }
+
+                bufTzOffset[offset] = c;
+
+                if (c == '<')
+                {
+                    bufTzOffset[offset] = '\0';
+                    char buf[sizeof(bufTzOffset)];
+                    sprintf(buf, "UTC%s", bufTzOffset);
+                    strlcpy(bufTzOffset, buf, sizeof(bufTzOffset));
+                    break;
+                }
+
+                offset++;
+            }
+        }
+        else if (!skip)
+        {
+            bufTzOffset[offset] = c;
+
+            if (c == ',')
+            {
+                bufTzOffset[offset] = '\0';
+                break;
+            }
+            else if (i == len)
+            {
+                skip = true;
+
+                i = tempI;
+                offset = 0;
+
+                // DEBUGLOG("RESTART !!!\r\n");
+            }
+            else
+                offset++;
+        }
+
+        if (c == '>' && skip == false)
+        {
+            count++;
+
+            if (count == 1 && tempI == 0)
+            {
+                _case = 0;
+                tempI = i;
+            }
+            else if (count == 2)
+            {
+                _case = 1;
+                i = tempI;
+                offset = 0;
+                skip = true;
+            }
+        }
+    }
+
+    // DEBUGLOG("CASE: %d, tempI: %d\r\n", _case, tempI);
+
+    x = u8g2.getStrWidth(bufTzOffset);
+    x = (dispWidth - x) / 2;
+    y = y + (1 * (u8g2.getMaxCharHeight() + 2));
+    u8g2.setCursor(x, y);
+
+    u8g2.print(bufTzOffset);
+
+    u8g2.setDrawColor(mask);
+
+    //*** SAVE ***//
+    if (pos == Save)
+    {
+        color = !mask;
+
+        if (switchPinToggled)
+        {
+            strlcpy(configLocation.timezonename, tempBufZoneName, sizeof(configLocation.timezonename));
+            strlcpy(configLocation.timezonestring, tempBufZoneString, sizeof(configLocation.timezonestring));
+
+            setenv("TZ", configLocation.timezonestring, 1 /*overwrite*/);
+            // tzset();
+        }
+    }
+    else
+        color = mask;
+
+    x = 0;
+    y = y + (1 * (u8g2.getMaxCharHeight() + 2));
+    u8g2.setCursor(x, y);
+    u8g2.setDrawColor(color);
+    u8g2.print(PSTR("Save"));
+    u8g2.setDrawColor(mask);
+
+    //*** EXIT ***//
+    if (pos == Exit)
+        color = !mask;
+    else
+        color = mask;
+
+    x = 0;
+    y = y + (1 * (u8g2.getMaxCharHeight() + 2));
+    u8g2.setCursor(x, y);
+    u8g2.setCursor(x, y);
+    u8g2.setDrawColor(color);
+    u8g2.print(PSTR("Back"));
+    u8g2.setDrawColor(mask);
 }
 
 void ConstructSholatTimePage()
 {
     char buf[17];
     const uint8_t *font;
+
+    uint16_t dispWidth = u8g2.getDisplayWidth();
 
     //title
     font = u8g2_font_artossans8_8r;
@@ -324,7 +664,7 @@ void ConstructSholatTimePage()
 
     const char *text = "JADWAL SHOLAT";
     int len = u8g2.getStrWidth(text);
-    uint8_t x = (128 - len) / 2;
+    int16_t x = (dispWidth - len) / 2;
 
     u8g2.setCursor(x, 0);
     u8g2.print(text);
@@ -437,7 +777,7 @@ void ConstructCompassPage()
 
     // int len;
     char temp[7];
-    dtostrf(configLocation.timezone, 0, 0, temp);
+    // dtostrf(configLocation.timezone, 0, 0, temp);
     // len = strlen(temp);
 
     // const uint8_t *font;
@@ -489,10 +829,10 @@ void ConstructAlarmPage()
 
     if (state500ms)
     {
-        snprintf_P(buf, sizeof(buf), PSTR("%d:%02d"), h, m);
+        snprintf_P(buf, sizeof(buf), PSTR("%d:%02d"), hourLocal, minLocal);
     }
     else
-        snprintf_P(buf, sizeof(buf), PSTR("%d %02d"), h, m);
+        snprintf_P(buf, sizeof(buf), PSTR("%d %02d"), hourLocal, minLocal);
 
     int x, y;
 
@@ -980,6 +1320,7 @@ void ConstructSettingsPage(int16_t _selected)
         {
             "DATE/TIME",
             "TIMEZONE",
+            "TIMEZONE DB",
             "GPS",
             "MENU_3",
             "EXIT"};
@@ -1109,7 +1450,8 @@ void ConstructDateTimePage(int16_t _pos, uint32_t _moment)
 
         uint32_t timestamp = moment + TimezoneSeconds();
         RtcDateTime dt;
-        dt = RtcDateTime(timestamp);
+        // dt = RtcDateTime(timestamp);
+        dt.InitWithEpoch32Time(timestamp);
 
         day = dt.Day();
         month = dt.Month();
@@ -1413,7 +1755,8 @@ void ConstructDateTimePage(int16_t _pos, uint32_t _moment)
 
             // sync system time
             // utcTime = dt.Epoch32Time(); // use this if you need EPOCH from 1970
-            utcTime = dt.TotalSeconds(); // use this if you need EPOCH from 2000
+            uint32_t newtime = dt.TotalSeconds(); // use this if you need EPOCH from 2000
+            SyncTime(newtime);
             Serial.print("\r\nSystem time has been updated!\r\n");
 
             // sync system time

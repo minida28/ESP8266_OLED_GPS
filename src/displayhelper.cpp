@@ -13,6 +13,12 @@
 
 #define DEBUGPORT Serial
 
+#define PRINT(fmt, ...)                          \
+    {                                            \
+        static const char pfmt[] PROGMEM = fmt;  \
+        DEBUGPORT.printf_P(pfmt, ##__VA_ARGS__); \
+    }
+
 // #define RELEASE
 
 #ifndef RELEASE
@@ -124,3 +130,4 @@ void DisplayLoop()
 
     // u8g2_2.sendBuffer();
 }
+

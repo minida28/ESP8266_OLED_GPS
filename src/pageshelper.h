@@ -25,6 +25,7 @@ enum enumPage
   Clock,
   Speedometer,
   Timezone,
+  TimezoneDB,
   BaseLocation,
   SholatTime,
   Uptime,
@@ -54,6 +55,7 @@ enum enumSettingsMenu
 {
   EntrySetDateTime,
   EntryTimezone,
+  EntryTimezoneDB,
   EntrySetGPS,
   EntryMenu3,
   ExitSettingsMenu,
@@ -95,10 +97,13 @@ enum enumSetTimeDate
 };
 
 extern uint8_t mode;
+extern uint8_t page;
+extern bool pageChangeFlag;
 
 void ConstructClockPage();
 void ConstructSpeedometerPage();
 void ConstructTimezonePage();
+void ConstructTimezoneDBPage();
 void ConstructBaseLocationPage();
 void ConstructSholatTimePage();
 void ConstructUptimePage();
